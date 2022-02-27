@@ -1,8 +1,17 @@
+#include "address.hh"
 #include "socket.hh"
 #include "util.hh"
 
+#include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <string>
+#include <sys/socket.h>
+
+#include <future>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 
@@ -17,8 +26,44 @@ void get_URL(const string &host, const string &path) {
     // (not just one call to read() -- everything) until you reach
     // the "eof" (end of file).
 
-    cerr << "Function called: get_URL(" << host << ", " << path << ").\n";
-    cerr << "Warning: get_URL() has not been implemented yet.\n";
+    Address addr(host, "http");
+    TCPSocket http_tcp;
+    http_tcp.connect(addr);
+    http_tcp.write("GET " + path + " HTTP/1.1\r\n");
+    http_tcp.write("HOST: " + host + "\r\n");
+    http_tcp.write("Connection: close\r\n");
+    http_tcp.write("\r\n");
+
+    //http_tcp.shutdown(SHUT_RDWR);
+    bool out = false;
+
+    while(!out){
+        std::future<void> future = std::async(std::launch::async, [&http_tcp](){
+            cout << http_tcp.read(); 
+        });
+
+        std::future_status status;
+
+        bool break_out = false;
+
+        do {
+            switch(status = future.wait_for(1s); status) {
+                case std::future_status::deferred: break;
+                case std::future_status::timeout: break_out = true; break;
+                case std::future_status::ready: break;
+            }
+
+            if (break_out) {
+                break;
+            }
+        } while (status != std::future_status::ready && !break_out);
+
+        if (break_out) {
+            out = true;
+            http_tcp.close();
+            exit(0);
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -42,7 +87,7 @@ int main(int argc, char *argv[]) {
 
         // Call the student-written function.
         get_URL(host, path);
-    } catch (const exception &e) {
+    } catch (const exception &e) { 
         cerr << e.what() << "\n";
         return EXIT_FAILURE;
     }
